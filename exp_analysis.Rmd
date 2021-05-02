@@ -1,0 +1,524 @@
+---
+title: "Exploratory_Document"
+author: "Dario J C"
+date: "02/05/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Exploratory Analysis
+
+The following are questions which were deemed important in the analysis
+
+-   What does the data look like?
+
+    The data given is found at this [link](https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip) which is a zip file and includes 12 text files. Our interest is three of these files which are primarily in english and are taken based on blogs, news, and twitter respectively.\
+    Although the original description says differently, we can check and see the files themselves do not include in their text any descriptors which can be used to track heir sources. I believe we were given a small subset of the original data to work on.
+
+-   Where does the data come from?
+
+    The was collected from publicly available sources by a web crawler which in its editing included parsing further, to remove duplicate entries and split into individual lines. A link to the original description can be found [here](http://web.archive.org/web/20160930083655/http://www.corpora.heliohost.org/aboutcorpus.html).
+
+-   What interesting key notes did you find in the data?
+
+    I found that the data has more text from the blogs, rather than twitter or the news. The news source has n-grams which don't rely on colloqial language, or slang (e.g. contractions or the use of 'lol' or 'rt') as much as the blog or twitter does. The concern regarding foreign languages in the text seems ignorable for the most part as they don't heavily influence the top n-grams, but cleaning is still needed as we have the use of specicif slang (e.g. 'rt please') and single letter words which still show themselves. Further details can be found below.
+
+### Download the Data
+
+For our Exploratory analysis, we will be primarily working with the **quanteda** package, but will switch to **ggplot2** for visualizations.
+
+We used the function `stri_split_lines1` to read in our text files as characters for each line. This is then fed into the `corpus` function to build a corpus for us to analyse.
+
+```{r libraries, message=FALSE, warning=FALSE}
+library(tidyverse)
+
+library(quanteda)
+
+library(readtext)
+library(stringi)
+```
+
+```{r download files, warning=FALSE}
+
+# Get working directory
+dir <- getwd()
+
+# Name file being downloading
+zip_file <- "Coursera-SwiftKey.zip"
+
+
+if( !any(list.files() == "Coursera-SwiftKey.zip")){
+  
+  # Link to file to download
+  dl_url <- "https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip"
+  
+  # Create place file to be downloaded to
+  zip_loc <- as.character(paste(dir, zip_file, sep = "/"))
+  
+  # Download file
+  download.file(dl_url,
+                destfile = zip_loc)
+  
+  rm(list = c("dl_url",
+              "zip_loc"))
+} 
+
+
+if( !any(str_detect(list.dirs(), "final/en_US"))){
+  # Unzip file
+  unzip(zip_file)
+}
+
+# Get paths to see where the file we want are located
+paths <- list.dirs()
+# Ensure we pull only the path to the files we want
+used_path <- paths[str_detect(paths, "en_US")]
+# Open the file we're interested in
+setwd(used_path)
+
+
+
+# Create corpus, where each line is a document
+full_text_blog <- stri_split_lines1(readtext("en_US.blogs.txt"))
+full_text_news <- stri_split_lines1(readtext("en_US.news.txt"))
+full_text_twitter <- stri_split_lines1(readtext("en_US.twitter.txt"))
+
+
+prop <- 1
+prop_blog <- round( length(full_text_blog) * prop)
+prop_news <- round( length(full_text_news) * prop)
+prop_twitter <- round( length(full_text_twitter) * prop)
+
+set.seed(123)
+index_blog <- sample(1:length(full_text_blog), prop_blog, replace = FALSE)
+index_news <- sample(1:length(full_text_news), prop_news, replace = FALSE)
+index_twitter <- sample(1:length(full_text_twitter), prop_twitter, replace = FALSE)
+
+corpus_blog <- corpus(full_text_blog[index_blog])
+corpus_news <- corpus(full_text_news[index_news])
+corpus_twitter <- corpus(full_text_twitter[index_twitter])
+
+
+# Move back to old work directory
+setwd(dir)
+
+# Clean up
+rm(list = c("dir",
+            "paths",
+            "used_path",
+            "zip_file",
+            "prop",
+            "prop_blog",
+            "prop_news",
+            "prop_twitter",
+            "full_text_blog",
+            "full_text_news",
+            "full_text_twitter",
+            "index_blog",
+            "index_news",
+            "index_twitter"))
+
+```
+
+### Basic Statistics
+
+We will generate some basic statistics to better understand what exactly we're looking at.
+
+```{r Generate Basic Statistics}
+# Count words
+word_length_blog <- ntoken(tokens(corpus_blog,
+                            what = "word",
+                            remove_punct = TRUE,
+                            remove_url = TRUE))
+word_length_news <- ntoken(tokens(corpus_news,
+                             what = "word",
+                             remove_punct = TRUE,
+                             remove_url = TRUE))
+word_length_twitter <- ntoken(tokens(corpus_twitter,
+                             what = "word",
+                             remove_punct = TRUE,
+                             remove_url = TRUE))
+
+# Count sentences
+sentence_length_blog <- nsentence(corpus_blog)
+sentence_length_news <- nsentence(corpus_news)
+sentence_length_twitter <- nsentence(corpus_twitter)
+
+## Plot sentences
+
+# Plot for blog
+as.data.frame(sentence_length_blog) %>%
+  filter(sentence_length_blog != 0) %>%
+  ggplot(aes(x = sentence_length_blog)) +
+  geom_histogram(fill = 'blue',
+                 colour = 'grey',
+                 binwidth = 1) +
+  scale_y_log10(labels = scales::comma) +
+  labs(title = 'Number of Sentences in Blog',
+       x = 'sentences',
+       y = 'count (log)',
+       subtitle = 'A histogram of number of sentences',
+       caption = 'With **no** filtered Words')
+
+# Plot for news
+as.data.frame(sentence_length_news) %>%
+  filter(sentence_length_news != 0) %>%
+  ggplot(aes(x = sentence_length_news)) +
+  geom_histogram(fill = 'blue',
+                 colour = 'grey',
+                 binwidth = 1) +
+  scale_y_log10(labels = scales::comma) +
+  labs(title = 'Number of Sentences in News',
+       x = 'sentences',
+       y = 'count (log)',
+       subtitle = 'A histogram of number of sentences',
+       caption = 'With **no** filtered Words')
+
+# Plot for twitter
+as.data.frame(sentence_length_twitter) %>%
+  filter(sentence_length_twitter != 0) %>%
+  ggplot(aes(x = sentence_length_twitter)) +
+  geom_histogram(fill = 'blue',
+                 colour = 'grey',
+                 binwidth = 1) +
+  scale_y_log10(labels = scales::comma) +
+  labs(title = 'Number of Sentences in Twitter',
+       x = 'sentences',
+       y = 'count (log)',
+       subtitle = 'A histogram of number of sentences',
+       caption = 'With **no** filtered Words')
+
+
+if(!any(ls() == "basic_stats")){
+
+# Dataframe of basic stats
+basic_stats <- data.frame(
+  source = c ("blog",
+              "news",
+              "twitter"),
+  num_rows = c(length(corpus_blog),
+               length(corpus_news),
+               length(corpus_twitter)),
+  num_words = c(sum(word_length_blog),
+                    sum(word_length_news),
+                    sum(word_length_twitter)),
+  num_sentences = c(sum(sentence_length_blog),
+                    sum(sentence_length_news),
+                    sum(sentence_length_twitter))
+)
+
+}
+
+# Show table
+basic_stats %>%
+  gt::gt() %>%
+  gt::fmt_number(
+    columns = 2:4,
+    use_seps = TRUE,
+  )
+
+rm(list = "word_length_blog",
+   "word_length_news",
+   "word_length_twitter",
+   "sentence_length_blog",
+   "sentence_length_news",
+   "sentence_length_twitter")
+
+```
+
+Our plots show us most of the text we have are single sentences, this makes sense as we're told in the data description that the data was parsed and 50% of the original scraped information has been removed. We are left with what seems to be independent sentences.
+
+We also can see that the blog gives us the most text.
+
+### Create Tokens
+
+Continuing our exploratory phase, we create our tokens to better understand word layout.
+
+```{r Generate Tokens}
+
+# Create tokens
+token_blog <- tokens(corpus_blog)
+token_news <- tokens(corpus_news)
+token_twitter <- tokens(corpus_twitter)
+
+```
+
+### Generate Visualisation
+
+We will now start to remove uninteresting components from our corpus to better visualise what's occurring. These components are:
+
+1.  punctuation
+
+2.  symbols
+
+3.  numbers
+
+4.  urls
+
+5.  stopwords
+
+You may notice I haven't removed profanity. I choose not to as this is still the exploratory phase and I wished to see if it would change any of the details we find.
+
+We'll then create a **dfm** (document-feature matrix) to help us do some frequency analysis and see what words and **n-grams** sticks out.
+
+For reference, a dfm puts the documents into a matrix format. The rows are the original texts and the columns are the features of that text, which may be tokens.
+
+```{r}
+# Clean tokens
+token_blog_cleaned <- tokens_remove(tokens(token_blog,
+                                           remove_punct = TRUE,
+                                           remove_symbols = TRUE,
+                                           remove_numbers = TRUE,
+                                           remove_url = TRUE,
+                                           padding = TRUE
+                                           ),
+                                    padding = TRUE,
+                                    stopwords("english"))
+
+token_news_cleaned <- tokens_remove(tokens(token_news,
+                                           remove_punct = TRUE,
+                                           remove_symbols = TRUE,
+                                           remove_numbers = TRUE,
+                                           remove_url = TRUE,
+                                           padding = TRUE
+                                           ),
+                                    padding = TRUE,
+                                    stopwords("english"))
+
+token_twitter_cleaned <- tokens_remove(tokens(token_twitter,
+                                           remove_punct = TRUE,
+                                           remove_symbols = TRUE,
+                                           remove_numbers = TRUE,
+                                           remove_url = TRUE,
+                                           padding = TRUE
+                                           ),
+                                    padding = TRUE,
+                                    stopwords("english"))
+
+# Create a DFM
+dfmat_blog <- dfm(token_blog_cleaned)
+dfmat_news <- dfm(token_news_cleaned)
+dfmat_twitter <- dfm(token_twitter_cleaned)
+
+# Get frequency statistics
+freq_blog <- quanteda.textstats::textstat_frequency(dfmat_blog)
+freq_news <- quanteda.textstats::textstat_frequency(dfmat_news)
+freq_twitter <- quanteda.textstats::textstat_frequency(dfmat_twitter)
+
+# Create visualisations for single words
+freq_blog %>%
+  # remove 'uninteresting' words
+  # filter(2 < str_length(feature)) %>%
+  filter(feature != "") %>%
+  slice_head(n = 20) %>%
+  mutate(feature = factor(feature),
+         feature = fct_reorder(feature, frequency, min)) %>%
+  ggplot(aes(x = feature, y = frequency, fill = feature)) +
+  scale_y_continuous(labels = scales::comma) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  labs(title = 'Common Words in Blog',
+       x = NULL,
+       subtitle = 'The most common words in blog excerpts',
+       caption = 'With filtered Words')
+
+
+freq_news %>%
+  # remove 'uninteresting' words
+  # filter(2 < str_length(feature)) %>%
+  filter(feature != "") %>%
+  slice_head(n = 20) %>%
+  mutate(feature = factor(feature),
+         feature = fct_reorder(feature, frequency, min)) %>%
+  ggplot(aes(x = feature, y = frequency, fill = feature)) +
+  scale_y_continuous(labels = scales::comma) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  labs(title = 'Common Words in News',
+       x = NULL,
+       subtitle = 'The most common words in news excerpts',
+       caption = 'With filtered Words')
+
+freq_twitter %>%
+  # remove 'uninteresting' words
+  # filter(2 < str_length(feature)) %>%
+  filter(feature != "") %>%
+  slice_head(n = 20) %>%
+  mutate(feature = factor(feature),
+         feature = fct_reorder(feature, frequency, min)) %>%
+  ggplot(aes(x = feature, y = frequency, fill = feature)) +
+  scale_y_continuous(labels = scales::comma) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  labs(title = 'Common Words on Twitter',
+       x = NULL,
+       subtitle = 'The most common words in twitter excerpts',
+       caption = 'With filtered Words')
+  
+
+```
+
+We can see from the graph that the distributions are pretty interesting for each source.
+
+For the blog, we see the word 'one' is distinctly most used. With the news, the word 'said' is the highest, followed by 'one', to be frank this agrees with my preconceptions as the news in my opinion includes a great deal of citing sources which includes "X 'said' so and so".
+
+Twitter on the other hand seems the least biased with chosen words and 'just' is the first word listed.
+
+You can also see a lot more slang being used, for example 'lol', 'rt' or 'u'. I'm not sure how I will treat them at the moment, I'm currently leaning towards excluding them from predictions.
+
+What I'd like to point out is that they're some oddities. You may notice I didn't speak about 'â' or the single letter inclusions which should not be with the current token removals. I'll have to deal with those when designing the model, likely by removing one letter words, except for 'I' and 'a'.
+
+#### N-gram Generation
+
+We'll now create our n-grams and visualise them as well.
+
+```{r Generate n-grams}
+
+# Create bi-grams, n = 2
+dfmat_bi_blog <- token_blog_cleaned %>% tokens_ngrams(2) %>% dfm()
+dfmat_bi_news <- token_news_cleaned %>% tokens_ngrams(2) %>% dfm()
+dfmat_bi_twitter <- token_twitter_cleaned %>% tokens_ngrams(2) %>% dfm()
+
+# Get frequency statistics for bi-grams
+freq_bi_blog <- quanteda.textstats::textstat_frequency(dfmat_bi_blog)
+freq_bi_news <- quanteda.textstats::textstat_frequency(dfmat_bi_news)
+freq_bi_twitter <- quanteda.textstats::textstat_frequency(dfmat_bi_twitter)
+
+
+
+# Create tri-grams, n = 3
+dfmat_tri_blog <- token_blog_cleaned %>% tokens_ngrams(3) %>% dfm()
+dfmat_tri_news <- token_news_cleaned %>% tokens_ngrams(3) %>% dfm()
+dfmat_tri_twitter <- token_twitter_cleaned %>% tokens_ngrams(3) %>% dfm()
+
+# Get frequency statistics for tri-grams
+freq_tri_blog <- quanteda.textstats::textstat_frequency(dfmat_tri_blog)
+freq_tri_news <- quanteda.textstats::textstat_frequency(dfmat_tri_news)
+freq_tri_twitter <- quanteda.textstats::textstat_frequency(dfmat_tri_twitter)
+
+```
+
+```{r Visualise n-grams}
+
+# Create visualisations for bi grams
+
+freq_bi_blog %>%
+  # remove 'uninteresting' words
+  # filter(2 < str_length(feature)) %>%
+  filter(feature != "") %>%
+  slice_head(n = 20) %>%
+  mutate(feature = factor(feature),
+         feature = fct_reorder(feature, frequency, min)) %>%
+  ggplot(aes(x = feature, y = frequency, fill = feature)) +
+  scale_y_continuous(labels = scales::comma) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  labs(title = 'Common bi-grams in Blog',
+       x = NULL,
+       subtitle = 'The most common bi-grams in blog excerpts',
+       caption = 'With filtered Words')
+
+
+freq_bi_news %>%
+  # remove 'uninteresting' words
+  # filter(2 < str_length(feature)) %>%
+  filter(feature != "") %>%
+  slice_head(n = 20) %>%
+  mutate(feature = factor(feature),
+         feature = fct_reorder(feature, frequency, min)) %>%
+  ggplot(aes(x = feature, y = frequency, fill = feature)) +
+  scale_y_continuous(labels = scales::comma) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  labs(title = 'Common bi-grams in News',
+       x = NULL,
+       subtitle = 'The most common bi-grams in news excerpts',
+       caption = 'With filtered Words')
+
+freq_bi_twitter %>%
+  # remove 'uninteresting' words
+  # filter(2 < str_length(feature)) %>%
+  filter(feature != "") %>%
+  slice_head(n = 20) %>%
+  mutate(feature = factor(feature),
+         feature = fct_reorder(feature, frequency, min)) %>%
+  ggplot(aes(x = feature, y = frequency, fill = feature)) +
+  scale_y_continuous(labels = scales::comma) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  labs(title = 'Common bi-grams on Twitter',
+       x = NULL,
+       subtitle = 'The most common bi-grams in twitter excerpts',
+       caption = 'With filtered Words')
+```
+
+Nothing sticks out with the bi-grams except for the fact we see 't' paired off with words as a common occurrence in the blog excerpts. This 't' could refer to 'can't' or 'don't' or any other kinds of contractions. We only see this high rank with the blog excerpts, but not the news or twitter excerpts. I would surmise for the news that it's because the news does not favour contractions.
+
+Twitter once more has very specific jargon relevant to only itself, such as 'follow back', or 'please follow'.
+
+```{r Visualise n-grams continued}
+
+# Create visualisations for tri grams
+
+freq_tri_blog %>%
+  # remove 'uninteresting' words
+  # filter(2 < str_length(feature)) %>%
+  filter(feature != "") %>%
+  slice_head(n = 20) %>%
+  mutate(feature = factor(feature),
+         feature = fct_reorder(feature, frequency, min)) %>%
+  ggplot(aes(x = feature, y = frequency, fill = feature)) +
+  scale_y_continuous(labels = scales::comma) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  labs(title = 'Common tri-grams in Blog',
+       x = NULL,
+       subtitle = 'The most common tri-grams in blog excerpts',
+       caption = 'With filtered Words')
+
+
+freq_tri_news %>%
+  # remove 'uninteresting' words
+  # filter(2 < str_length(feature)) %>%
+  filter(feature != "") %>%
+  slice_head(n = 20) %>%
+  mutate(feature = factor(feature),
+         feature = fct_reorder(feature, frequency, min)) %>%
+  ggplot(aes(x = feature, y = frequency, fill = feature)) +
+  scale_y_continuous(labels = scales::comma) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  labs(title = 'Common tri-grams in News',
+       x = NULL,
+       subtitle = 'The most common tri-grams in news excerpts',
+       caption = 'With filtered Words')
+
+freq_tri_twitter %>%
+  # remove 'uninteresting' words
+  # filter(2 < str_length(feature)) %>%
+  filter(feature != "") %>%
+  slice_head(n = 20) %>%
+  mutate(feature = factor(feature),
+         feature = fct_reorder(feature, frequency, min)) %>%
+  ggplot(aes(x = feature, y = frequency, fill = feature)) +
+  scale_y_continuous(labels = scales::comma) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  labs(title = 'Common tri-grams on Twitter',
+       x = NULL,
+       subtitle = 'The most common tri-grams in twitter excerpts',
+       caption = 'With filtered Words')
+```
+
+In regards to the tri-grams, we see a resurgence of 't' leading tri-grams. We also find repeated words as tri-grams, such as 'ha-ha-ha' or 'please-please-please', I'm currently not sure if these add any value to a prediction model.
+
+### Initial thoughts on shiny app
+
+In regards to modelling and the shiny app, I wish to proceed by isolating and retaining contractions as one words. Further cleaning also seems to be required as certain symbols have slipped through.
+
+The app itself will be based on a combined corpus of the three datasets (blog, news & twitter), and use only the n-grams for prediction.
+
+I will also need to consider a method of removing unnecessary words to enhance speed of the model. I'm on the fence with profanity being removed at this step as it seems unnecessary with it not appearing highly ranked in any of the n-grams.
